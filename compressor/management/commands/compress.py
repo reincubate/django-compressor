@@ -1,10 +1,12 @@
 # flake8: noqa
 import io
 import os
+import re
 import sys
 from types import MethodType
 from fnmatch import fnmatch
 from optparse import make_option
+from urlparse import urlparse
 
 from django.core.management.base import NoArgsCommand, CommandError
 from django.template import (Context, Template,
@@ -277,10 +279,25 @@ class Command(NoArgsCommand):
                 key = get_offline_hexdigest(node.nodelist.render(context))
                 try:
                     result = node.render(context, forced=True)
+                    if node.mode == 'file':
+                        if node.kind == 'css':
+                            attr = 'href'
+                        else:
+                            attr = 'src'
+                        compress_path = urlparse(settings.COMPRESS_URL).path
+                        reg = '%s=".*?(%s.*?)"' % (attr, compress_path)
+                        hash_result = re.findall(reg, result)[0]
+                    else:
+                        hash_result = result
                 except Exception as e:
                     raise CommandError("An error occured during rendering %s: "
                                        "%s" % (template.template_name, e))
-                offline_manifest[key] = result
+                info = {
+                    'mode': node.mode,
+                    'kind': node.kind,
+                    'result': hash_result,
+                }
+                offline_manifest[key] = info
                 context.pop()
                 results.append(result)
                 count += 1
